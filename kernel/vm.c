@@ -121,6 +121,14 @@ kvmmap(uint64 va, uint64 pa, uint64 sz, int perm)
     panic("kvmmap");
 }
 
+// userd for initialing user's kernel page table
+void
+ukvmmap(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm)
+{
+  if(mappages(pagetable, va, sz, pa, perm) != 0)
+    panic("ukvmmap");
+}
+
 // translate a kernel virtual address to
 // a physical address. only needed for
 // addresses on the stack.
@@ -194,6 +202,28 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   }
 }
 
+void
+ukvmunmap(pagetable_t pagetable, uint64 va, uint64 size)
+{
+  uint64 a, last;
+  pte_t *pte;
+
+  a = PGROUNDDOWN(va);
+  last = PGROUNDDOWN(va + size - 1);
+
+  for(;;){
+    if((pte = walk(pagetable, a, 0)) == 0)
+      panic("ukvmunmap: walk");
+    if((*pte & PTE_V) == 0)
+      panic("ukvmunmap: not mapped");
+    if(PTE_FLAGS(*pte) == PTE_V)
+      panic("ukvmunmap: not a leaf");
+    *pte = 0;
+    if (a==last)
+      break;
+    a+=PGSIZE;
+  }
+}
 // create an empty user page table.
 // returns 0 if out of memory.
 pagetable_t
@@ -439,4 +469,26 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+// refrence ZhuEthan's lab
+void rec_vmprint(pagetable_t pagetable, int level) {
+	for (int i = 0; i < 512; i++) {
+		pte_t pte = pagetable[i];
+		if (pte & PTE_V) {
+			uint64 child = PTE2PA(pte);
+			for (int j = 0; j < level; j++) {
+				printf(" ..");
+			}
+			printf("%d: pte %p pa %p\n", i, pte, child);
+			if ((pte & (PTE_R|PTE_W|PTE_X)) == 0) {
+				rec_vmprint((pagetable_t)child, level+1);
+			} 
+		}
+	}
+}
+
+void vmprint(pagetable_t pagetable) {
+	printf("page table %p\n", pagetable);
+	rec_vmprint(pagetable, 1);
 }

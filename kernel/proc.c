@@ -20,6 +20,8 @@ static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
+extern char etext[];  // kernel.ld sets this to end of kernel code.
+extern pagetable_t kernel_pagetable;
 
 // initialize the proc table at boot time.
 void
@@ -121,6 +123,29 @@ found:
     return 0;
   }
 
+  // Alloc a kernel page table
+  pagetable_t kpagetable = uvmcreate();
+
+  // Fill in the process's kernel page table, the same as kernel_pagetable
+  ukvmmap(kpagetable, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+  ukvmmap(kpagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+  ukvmmap(kpagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+  ukvmmap(kpagetable, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+  ukvmmap(kpagetable, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+  ukvmmap(kpagetable, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+  ukvmmap(kpagetable, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+  
+  // Set up process's knernel stack
+  // in procinit, alloc one page for every empty process as stack
+  // so we don't need to realloc a stack ,just set up process's kpagetable to use that one.
+  pte_t* pte = walk(kernel_pagetable, p->kstack, 0);
+  uint64 pa = PTE2PA(*pte); 
+  if(pa == 0)
+    panic("walkaddr");
+  ukvmmap(kpagetable, p->kstack, pa, PGSIZE, PTE_R | PTE_W);
+
+  p->kpagetable = kpagetable;
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -141,7 +166,10 @@ freeproc(struct proc *p)
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+  if(p->kpagetable)
+    proc_freekpagetable(p);
   p->pagetable = 0;
+  p->kpagetable = 0;
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -193,6 +221,25 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
+}
+
+// Free a process's kernel page table
+// It's different from the proc_freepagetable, which free the physical memory
+// In kernel space, we use physical directly, not use kalloc to allocate
+// so We don't need to call kfree, just clear out the PTE and free pages used by kpagetable.
+void
+proc_freekpagetable(struct proc *p)
+{
+  pagetable_t kpagetable = p->kpagetable;
+  ukvmunmap(kpagetable, UART0, PGSIZE);
+  ukvmunmap(kpagetable, VIRTIO0, PGSIZE);
+  ukvmunmap(kpagetable, CLINT, 0x10000);
+  ukvmunmap(kpagetable, PLIC, 0x400000);
+  ukvmunmap(kpagetable, KERNBASE, (uint64)etext-KERNBASE);
+  ukvmunmap(kpagetable,(uint64)etext, PHYSTOP - (uint64)etext);
+  ukvmunmap(kpagetable, TRAMPOLINE, PGSIZE);
+  ukvmunmap(kpagetable, p->kstack, PGSIZE);
+  freewalk(kpagetable);
 }
 
 // a user program that calls exec("/init")
@@ -473,6 +520,11 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+
+        // load process's kernel page table 
+        w_satp(MAKE_SATP(p->kpagetable));
+        sfence_vma();
+
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
@@ -485,6 +537,9 @@ scheduler(void)
     }
 #if !defined (LAB_FS)
     if(found == 0) {
+      // use the existing kernel_pagetable when no process is running
+      w_satp(MAKE_SATP(kernel_pagetable));
+      sfence_vma();
       intr_on();
       asm volatile("wfi");
     }
