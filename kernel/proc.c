@@ -129,7 +129,6 @@ found:
   // Fill in the process's kernel page table, the same as kernel_pagetable
   ukvmmap(kpagetable, UART0, UART0, PGSIZE, PTE_R | PTE_W);
   ukvmmap(kpagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
-  ukvmmap(kpagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
   ukvmmap(kpagetable, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
   ukvmmap(kpagetable, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
   ukvmmap(kpagetable, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
@@ -233,7 +232,6 @@ proc_freekpagetable(struct proc *p)
   pagetable_t kpagetable = p->kpagetable;
   ukvmunmap(kpagetable, UART0, PGSIZE);
   ukvmunmap(kpagetable, VIRTIO0, PGSIZE);
-  ukvmunmap(kpagetable, CLINT, 0x10000);
   ukvmunmap(kpagetable, PLIC, 0x400000);
   ukvmunmap(kpagetable, KERNBASE, (uint64)etext-KERNBASE);
   ukvmunmap(kpagetable,(uint64)etext, PHYSTOP - (uint64)etext);
