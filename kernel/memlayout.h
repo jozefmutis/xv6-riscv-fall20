@@ -63,5 +63,6 @@
 //   expandable heap
 //   ...
 //   TRAPFRAME (p->trapframe, used by the trampoline)
+//   =================   PLIC   ==================
 //   TRAMPOLINE (the same page as in the kernel)
-#define TRAPFRAME (TRAMPOLINE - PGSIZE)
+#define TRAPFRAME (PLIC - PGSIZE)
