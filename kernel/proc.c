@@ -306,7 +306,7 @@ growproc(int n)
   sz = p->sz;
   if(n > 0){
     // Prevent user processes from growing larger than the PLIC address.
-    if (PGROUNDUP(sz + n) >= TRAPFRAME)
+    if (PGROUNDUP(sz + n) >= PLIC)
       return -1;
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
