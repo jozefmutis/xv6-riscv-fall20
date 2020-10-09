@@ -23,9 +23,50 @@ struct {
   struct run *freelist;
 } kmem;
 
+#define PA2IDX(pa) (((uint64)pa) >> 12)
+struct {
+  struct spinlock lock;
+  int count[PGROUNDUP(PHYSTOP) / PGSIZE];
+} refcnt;
+
+void
+rcinit()
+{
+  initlock(&refcnt.lock, "refcnt");
+  acquire(&kmem.lock);
+  for (int i = 0; i < PGROUNDUP(PHYSTOP) / PGSIZE; i++)
+    refcnt.count[i] = 0;
+  release(&kmem.lock);
+}
+
+void
+increase_rc(void *pa)
+{
+  acquire(&refcnt.lock);
+  refcnt.count[PA2IDX(pa)]++;
+  release(&refcnt.lock);
+}
+
+void
+decrease_rc(void *pa)
+{
+  acquire(&refcnt.lock);
+  refcnt.count[PA2IDX(pa)]--;
+  release(&refcnt.lock);
+}
+int
+get_rc(void *pa)
+{
+  acquire(&refcnt.lock);
+  int rc = refcnt.count[PA2IDX(pa)];
+  release(&refcnt.lock);
+  return rc;
+}
+
 void
 kinit()
 {
+  rcinit();
   initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
 }
@@ -36,7 +77,11 @@ freerange(void *pa_start, void *pa_end)
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  {
+    // rcinit set refcnt = 0, kfree will decrease 1, so increase first
+    increase_rc((void*)p);
     kfree(p);
+  }
 }
 
 // Free the page of physical memory pointed at by v,
@@ -51,6 +96,9 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+  decrease_rc(pa);
+  if (get_rc(pa) > 0)
+    return;
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
@@ -77,6 +125,9 @@ kalloc(void)
   release(&kmem.lock);
 
   if(r)
+  {
     memset((char*)r, 5, PGSIZE); // fill with junk
+    increase_rc((void*)r);
+  }
   return (void*)r;
 }
