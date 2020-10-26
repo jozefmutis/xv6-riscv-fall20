@@ -8,7 +8,7 @@
 - [x] [Lab traps: Trap](https://github.com/gaofanfei/xv6-riscv-fall20/tree/traps)
 - [x] [Lab lazy: Lazy allocation](https://github.com/gaofanfei/xv6-riscv-fall20/tree/lazy)
 - [x] [Lab cow: Copy-on-write fork](https://github.com/gaofanfei/xv6-riscv-fall20/tree/cow)
-- [ ] [Lab thread: Multithreading](https://pdos.csail.mit.edu/6.828/2020/labs/thread.html)
+- [x] [Lab thread: Multithreading](https://github.com/gaofanfei/xv6-riscv-fall20/tree/thread)
 - [ ] [Lab lock: Parallelism/locking](https://pdos.csail.mit.edu/6.828/2020/labs/lock.html)
 - [ ] [Lab fs: File system](https://pdos.csail.mit.edu/6.828/2020/labs/fs.html)
 - [ ] [Lab mmap: Mmap](https://pdos.csail.mit.edu/6.828/2020/labs/mmap.html)
